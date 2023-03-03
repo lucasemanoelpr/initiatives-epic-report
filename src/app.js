@@ -1,19 +1,18 @@
 require('dotenv').config()
-const express = require("express");
-const lpmEpicsReportService = require('./domain/lpm/lpmEpicsReportService');
-const projectService = require("./shared/services/projectService");
-
+const express = require("express")
+const nunjucks = require('nunjucks')
+const lpmEpicsReportService = require('./domain/lpm/lpmEpicsReportService')
 
 const app = express()
 
-app.get('/projects', async (req, res) => {
-  const projects = await projectService.getProjects()
-  res.send(projects)
-})
+nunjucks.configure(__dirname + '/views', {
+  autoescape: true,
+  express: app
+});
 
 app.get('/epics-lpm-report', async (req, res) => {
   const epicLpmReport = await lpmEpicsReportService.generateLpmEpicsReport()
-  res.send(epicLpmReport)
+  res.render('lpmReports/index.njk', { projectsLpmInfo: epicLpmReport })
 })
 
 module.exports = app

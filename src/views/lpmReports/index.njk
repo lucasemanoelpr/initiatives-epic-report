@@ -1,0 +1,22 @@
+<html>
+    <h1> Project Epics with LPM Initiative </h1>
+
+    <table>
+        <th> Project.Key </th>
+        <th> Project.Name</th>
+        <th> Active Epics </th>
+        <th> Epics with Initiative </th>
+        <th> % With Initiative </th>
+        {% for projectLpmInfo in projectsLpmInfo %}
+            <tr>
+                <td> {{ projectLpmInfo.key }} </td>
+                <td> {{ projectLpmInfo.name }} </td>
+                <td> {{ projectLpmInfo.issues.length }} </td>
+                <td> {{ projectLpmInfo.lpmInfo.issuesWithInitiative }} </td>
+                <td> {{ projectLpmInfo.lpmInfo.percentageWithInitiative }} </td>
+            </tr>
+        {% else %}
+            <li> Data Not Found </li>
+        {% endfor %}
+    </table>
+</html>
