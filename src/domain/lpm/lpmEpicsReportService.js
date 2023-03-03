@@ -29,12 +29,6 @@ class LpmEpicsReportService {
     }
 
     addLinkedToInitiativeInfo(lpmReportObject) {
-        /*
-            * 1. Percorrer as issues por projeto
-            * 2. Estiver issues com parent LPM e issues sem parent LPM
-            * 3. Salvar esta info na raiz do objeto projeto como 
-            * lpmInfo: { issuesWithoutInitiative: x, issuesWithInitiative: x, percentageWithInitiative: x% }
-        */
         lpmReportObject.map((obj, index) => {
             if (obj.issues == undefined) {
                 obj.lpmInfo = {
