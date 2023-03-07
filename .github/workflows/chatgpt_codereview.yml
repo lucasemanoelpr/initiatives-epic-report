@@ -1,92 +1,38 @@
-name: Code Review with ChatGPT
+name: Code Review
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [opened, edited, reopened]
 
 jobs:
   code-review:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: npm install
+      - name: Install dependencies
+        run: npm install node-fetch
 
-    - name: Perform code review
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
-      run: |
-        const fetch = require("node-fetch");
+      - name: Perform code review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
+        run: |
+          pr_number=$(echo $GITHUB_REF | awk 'BEGIN {FS="/"} {print $3}')
+          repo_owner=$(echo $GITHUB_REPOSITORY | awk 'BEGIN {FS="/"} {print $1}')
+          repo_name=$(echo $GITHUB_REPOSITORY | awk 'BEGIN {FS="/"} {print $2}')
+          pr_files=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number | jq -r '.changed_files')
+          code_review_url='https://api.openai.com/v1/engines/davinci-codex/completions'
 
-        async function performCodeReview(prNumber, repoOwner, repoName, authToken) {
-          const prUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`;
-          const prResponse = await fetch(prUrl, {
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-              Accept: 'application/vnd.github.v3+json'
-            }
-          });
-
-          if (!prResponse.ok) {
-            console.error(`Error fetching PR data: ${prResponse.status} ${prResponse.statusText}`);
-            return;
-          }
-
-          const prData = await prResponse.json();
-          const prFiles = prData.changed_files;
-          const codeReviewUrl = 'https://api.openai.com/v1/engines/davinci-codex/completions';
-
-          for (let i = 0; i < prFiles; i++) {
-            const fileUrl = prData.changed_files[i].contents_url;
-            const fileResponse = await fetch(fileUrl, {
-              headers: {
-                Authorization: `Bearer ${authToken}`,
-                Accept: 'application/vnd.github.v3.raw'
-              }
-            });
-
-            if (!fileResponse.ok) {
-              console.error(`Error fetching file data: ${fileResponse.status} ${fileResponse.statusText}`);
-              continue;
-            }
-
-            const fileData = await fileResponse.text();
-            const prompt = `Can you please review the following code changes?\n\n${fileData}\n\n`;
-            const reviewResult = await fetch(codeReviewUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.GPT_SECRET_KEY}`
-              },
-              body: JSON.stringify({
-                prompt,
-                max_tokens: 1024,
-                n: 1,
-                stop: '\n\n'
-              })
-            }).then(res => res.json());
-
-            const reviewComment = reviewResult.choices[0].text.trim();
-            const reviewFile = prData.changed_files[i].filename;
-            const reviewBody = `Code review for ${reviewFile}:\n\n${reviewComment}`;
-
-            const commentUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/issues/${prNumber}/comments`;
-            const commentResponse = await fetch(commentUrl, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${authToken}`,
-                Accept: 'application/vnd.github.v3+json'
-              },
-              body: JSON.stringify({ body: reviewBody })
-            });
-
-            if (!commentResponse.ok) {
-              console.error(`Error posting comment: ${commentResponse.status} ${commentResponse.statusText}`);
-            }
-          }
-        }
-
+          for ((i=0;i<$pr_files;i++)); do
+            file_url=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number/files?page=1&per_page=100 | jq -r ".[$i].contents_url")
+            file_contents=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" $file_url)
+            prompt="Can you please review the following code changes?\n\n$file_contents\n\n"
+            response=$(curl -s -H "Content-Type: application/json" -H "Authorization: Bearer $GPT_SECRET_KEY" -X POST -d "{\"prompt\": \"$prompt\", \"max_tokens\": 1024, \"n\": 1, \"stop\": \"\n\n\"}" $code_review_url)
+            comment=$(echo $response | jq -r '.choices[0].text')
+            file_name=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number/files?page=1&per_page=100 | jq -r ".[$i].filename")
+            comment_body="{\"body\": \"$comment\"}"
+            curl -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -X POST -d "$comment_body" "https://api.github.com/repos/$repo_owner/$repo_name/issues/$pr_number/comments"
+            echo "Code review for $file_name: $comment"
+          done
