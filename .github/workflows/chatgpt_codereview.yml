@@ -8,35 +8,32 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout pull request code
+      - name: Checkout code
         uses: actions/checkout@v2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.head_ref }}
 
-      - name: Generate code review comment
-        uses: openai/language@v1
-        id: chat
-        with:
-          engine: "text-davinci-002"
-          prompt: |
-            Please review the code changes in this pull request and leave a comment with any suggestions or feedback.
-          secret: ${{ secrets.GPT_SECRET_KEY }}
-
-      - name: Store code review comment
+      - name: Install OpenAI Python package
         run: |
-          echo "${{ steps.chat.outputs.generated_text }}" > comment.txt
+          pip install openai
 
-      - name: Leave code review comment
-        uses: actions/github-script@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const comment = fs.readFileSync('comment.txt', 'utf8');
-            const { data } = await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: comment
-            });
+      - name: Generate review comment
+        id: review
+        run: |
+          comment=$(openai.Completion.create(
+              engine="text-davinci-002",
+              prompt="Please review the changes in the pull request and provide feedback. Changes:\n\n" + "$(git diff --name-only "${{ github.base_ref }}" "${{ github.head_ref }}")",
+              max_tokens=1024,
+              n=1,
+              stop=None,
+              temperature=0.5
+          )["choices"][0]["text"])
+          echo "::set-output name=comment::$comment"
 
+      - name: Leave review comment
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": \"${{ steps.review.outputs.comment }}\"}" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.number }}/comments"
