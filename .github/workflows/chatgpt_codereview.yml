@@ -20,14 +20,7 @@ jobs:
       - name: Generate review comment
         id: review
         run: |
-          comment=$(openai.Completion.create(
-              engine="text-davinci-002",
-              prompt="Please review the changes in the pull request and provide feedback. Changes:\n\n" + "$(git diff --name-only "${{ github.base_ref }}" "${{ github.head_ref }}")",
-              max_tokens=1024,
-              n=1,
-              stop=None,
-              temperature=0.5
-          )["choices"][0]["text"])
+          comment=$(openai.Completion.create(engine="text-davinci-002",prompt="Please review the changes in the pull request and provide feedback. Changes:\n\n" + "$(git diff --name-only "${{ github.base_ref }}" "${{ github.head_ref }}")",max_tokens=1024,n=1,stop=None,temperature=0.5)["choices"][0]["text"]) \
           echo "::set-output name=comment::$comment"
 
       - name: Leave review comment
