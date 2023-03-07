@@ -8,41 +8,35 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout pull request code
         uses: actions/checkout@v2
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: ChatGPT review
-        id: chatgpt
-        uses: openai/github-action@v1.1.0
         with:
-          GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
-          GPT_MODEL: "text-davinci-002"
-          GPT_PROMPT: "Please review the code changes and leave a comment."
-          GPT_MAX_LENGTH: 500
-          GPT_TEMPERATURE: 0.7
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Post comment
-        if: ${{ steps.chatgpt.outputs.response != '' }}
+      - name: Generate code review comment
+        uses: openai/language@v1
+        id: chat
+        with:
+          engine: "text-davinci-002"
+          prompt: |
+            Please review the code changes in this pull request and leave a comment with any suggestions or feedback.
+          secret: ${{ secrets.GPT_SECRET_KEY }}
+
+      - name: Store code review comment
+        run: |
+          echo "${{ steps.chat.outputs.generated_text }}" > comment.txt
+
+      - name: Leave code review comment
         uses: actions/github-script@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: pullRequest } = await context.github.pulls.get({
+            const fs = require('fs');
+            const comment = fs.readFileSync('comment.txt', 'utf8');
+            const { data } = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
+              issue_number: context.payload.pull_request.number,
+              body: comment
             });
-            await context.github.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              event: 'COMMENT',
-              body: steps.chatgpt.outputs.response,
-              commit_id: pullRequest.head.sha,
-              path: pullRequest.changed_files[0],
-              position: 1,
-            });
+
