@@ -20,7 +20,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
       run: |
-        const fetch = require('node-fetch');
+        const fetch = require("node-fetch");
 
         async function performCodeReview(prNumber, repoOwner, repoName, authToken) {
           const prUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`;
