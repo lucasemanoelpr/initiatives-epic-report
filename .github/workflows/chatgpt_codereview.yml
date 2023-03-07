@@ -23,7 +23,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate code review
         id: review
-        uses: openai/gpt-2@v1
+        uses: openai/gpt-2
         with:
           prompt: |
             Please review the following code changes:
