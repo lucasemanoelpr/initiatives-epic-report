@@ -1,0 +1,48 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: ChatGPT review
+        id: chatgpt
+        uses: openai/github-action@v1.1.0
+        with:
+          GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
+          GPT_MODEL: "text-davinci-002"
+          GPT_PROMPT: "Please review the code changes and leave a comment."
+          GPT_MAX_LENGTH: 500
+          GPT_TEMPERATURE: 0.7
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post comment
+        if: ${{ steps.chatgpt.outputs.response != '' }}
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: pullRequest } = await context.github.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            await context.github.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              event: 'COMMENT',
+              body: steps.chatgpt.outputs.response,
+              commit_id: pullRequest.head.sha,
+              path: pullRequest.changed_files[0],
+              position: 1,
+            });
