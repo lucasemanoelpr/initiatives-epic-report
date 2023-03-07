@@ -2,7 +2,7 @@ name: Code Review
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, synchronize]
 
 jobs:
   review:
@@ -10,23 +10,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
         with:
-          ref: ${{ github.head_ref }}
-
-      - name: Install OpenAI Python package
-        run: |
-          pip install openai
-
-      - name: Generate review comment
+          python-version: "3.x"
+      - name: Install dependencies
+        run: pip install openai
+      - name: Get PR title and description
+        id: pr
+        uses: peter-evans/get-pull-request@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate code review
         id: review
-        run: |
-          comment=$(openai.Completion.create(engine="text-davinci-002",prompt="Please review the changes in the pull request and provide feedback. Changes:" + "$(git diff --name-only "${{ github.base_ref }}" "${{ github.head_ref }}")",max_tokens=1024,n=1,stop=None,temperature=0.5)["choices"][0]["text"])
-          echo "::set-output name=comment::$comment"
+        uses: openai/gpt@v1
+        with:
+          prompt: |
+            Please review the following code changes:
 
-      - name: Leave review comment
-        run: |
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"body\": \"${{ steps.review.outputs.comment }}\"}" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.number }}/comments"
+            ${steps.pr.outputs.title}
+
+            ${steps.pr.outputs.body}
+
+            Review:
+          max-tokens: 100
+          temperature: 0.7
+          api-key: ${{ secrets.GPT_SECRET_KEY }}
+      - name: Comment on PR
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          body: ${{ steps.review.outputs.text }}
+          path: review.md
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
