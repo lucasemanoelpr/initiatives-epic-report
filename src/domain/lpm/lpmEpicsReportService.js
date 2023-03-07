@@ -8,7 +8,6 @@ class LpmEpicsReportService {
     async generateLpmEpicsReport() {
         var lpmReportObject = await this.projectService.getProjects()
         const softwareProjectsEpics = await this.projectService.getSoftwareProjectsEpics()
-
         softwareProjectsEpics.issues.map((issue) => {
             let key = issue.key.split('-')[0]
             const indexProject = lpmReportObject.findIndex(obj => obj.key === key)
