@@ -1,0 +1,38 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install node-fetch
+
+      - name: Perform code review with chatgpt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPT_SECRET_KEY: ${{ secrets.GPT_SECRET_KEY }}
+        run: |
+          pr_number=$(echo $GITHUB_REF | awk 'BEGIN {FS="/"} {print $3}')
+          repo_owner=$(echo $GITHUB_REPOSITORY | awk 'BEGIN {FS="/"} {print $1}')
+          repo_name=$(echo $GITHUB_REPOSITORY | awk 'BEGIN {FS="/"} {print $2}')
+          pr_files=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number | jq -r '.changed_files')
+          code_review_url='https://api.openai.com/v1/engines/davinci-codex/completions'
+
+          for ((i=0;i<$pr_files;i++)); do
+            file_url=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number/files?page=1&per_page=100 | jq -r ".[$i].contents_url")
+            file_contents=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" $file_url)
+            prompt="Can you please review the following code changes?\n\n$file_contents\n\n"
+            response=$(curl -s -H "Content-Type: application/json" -H "Authorization: Bearer $GPT_SECRET_KEY" -X POST -d "{\"prompt\": \"$prompt\", \"max_tokens\": 1024, \"n\": 1, \"stop\": \"\n\n\"}" $code_review_url)
+            comment=$(echo $response | jq -r '.choices[0].text')
+            file_name=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/$repo_owner/$repo_name/pulls/$pr_number/files?page=1&per_page=100 | jq -r ".[$i].filename")
+            comment_body="{\"body\": \"$comment\"}"
+            curl -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -X POST -d "$comment_body" "https://api.github.com/repos/$repo_owner/$repo_name/issues/$pr_number/comments"
+            echo "Code review for $file_name: $comment"
+          done
